@@ -1,17 +1,56 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import Optional
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from database import get_db, init_db, engine
 from models import User, Farmer, MandiOwner, Retailer, RetailerItem, RetailerMandiOrder, Base
-from retailer_routes import router as retailer_router
+from retailer.routes import router as retailer_router
 from schemas import UserRegister, UserLogin, Token, UserResponse
 from auth import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from farmer.routes import router as farmer_router
+from retailer.agent import run_demand_agent
 
-app = FastAPI(title="Supply Chain Management API")
+logger = logging.getLogger("server")
+
+# ── Scheduler ────────────────────────────────────────────────────────────────
+scheduler = BackgroundScheduler()
+
+
+def _scheduled_agent_job():
+    """Wrapper called by APScheduler."""
+    logger.info("⏰ Cron triggered: running demand agent...")
+    try:
+        result = run_demand_agent()
+        logger.info(f"Agent finished: {result[:200]}")
+    except Exception as e:
+        logger.error(f"Agent failed: {e}", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: schedule the agent to run daily at 06:00 UTC
+    scheduler.add_job(
+        _scheduled_agent_job,
+        trigger=CronTrigger(hour=6, minute=0),
+        id="demand_alert_agent",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("✅ APScheduler started — demand agent runs daily at 06:00 UTC")
+    yield
+    # Shutdown
+    scheduler.shutdown(wait=False)
+    logger.info("🛑 APScheduler shut down")
+
+
+app = FastAPI(title="Supply Chain Management API", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -148,6 +187,17 @@ app.include_router(retailer_router)
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "Supply Chain API"}
+
+
+@app.post("/api/agent/run", tags=["Agent"])
+def trigger_agent_manually():
+    """Manually trigger the demand-alert agent (for testing)."""
+    try:
+        result = run_demand_agent()
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
