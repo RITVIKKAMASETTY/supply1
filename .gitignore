@@ -1,6 +1,11 @@
--e 
-# Environment files
-*.env
-*.env.*
-*.venv.*
-*.venv
+# Python
+venv/
+backend/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+
+# mac
+.DS_Store
