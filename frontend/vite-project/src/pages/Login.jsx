@@ -5,6 +5,7 @@ import { User, Lock, ArrowRight } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import api from '../services/api';
+import signinImage from '../assets/image.png';
 
 const Login = () => {
     const navigate = useNavigate();
@@ -27,7 +28,18 @@ const Login = () => {
             const response = await api.post('/login', formData);
             localStorage.setItem('token', response.data.access_token);
             localStorage.setItem('user', JSON.stringify(response.data));
-            navigate('/'); // Redirect to dashboard/home
+
+            // Role-based redirection
+            const role = response.data.role;
+            if (role === 'farmer') {
+                navigate('/farmer');
+            } else if (role === 'mandi_owner') {
+                navigate('/mandi');
+            } else if (role === 'retailer') {
+                navigate('/retailer');
+            } else {
+                navigate('/'); // Default/Admin
+            }
         } catch (err) {
             setError(err.response?.data?.detail || 'Login failed. Please try again.');
         } finally {
@@ -41,11 +53,11 @@ const Login = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="bg-gray-100 rounded-[3rem] shadow-[20px_20px_60px_#d1d1d1,-20px_-20px_60px_#ffffff] w-full max-w-5xl overflow-hidden flex flex-col md:flex-row min-h-[600px]"
+                className="bg-gray-100 rounded-[2rem] shadow-[20px_20px_60px_#d1d1d1,-20px_-20px_60px_#ffffff] w-full max-w-4xl overflow-hidden flex flex-col md:flex-row min-h-[480px]"
             >
                 {/* LEFT SIDE (Login Form Section) */}
-                <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center relative bg-[#f0f0f3]">
-                    <div className="mb-10 text-left">
+                <div className="w-full md:w-1/2 p-8 flex flex-col justify-center relative bg-[#f0f0f3]">
+                    <div className="mb-6 text-left">
                         <h1 className="text-4xl font-serif font-bold text-gray-800 mb-2">Welcome !</h1>
                         <p className="text-xl text-gray-500 font-light">Sign in to</p>
                     </div>
@@ -98,43 +110,12 @@ const Login = () => {
                 </div>
 
                 {/* RIGHT SIDE (Illustration Section) */}
-                <div className="w-full md:w-1/2 bg-gradient-to-br from-[#e0f7fa] to-[#e1bee7] relative hidden md:flex items-center justify-center p-12 overflow-hidden">
-                    {/* Decorative shapes to mimic the "Illustration" */}
-                    <div className="absolute inset-0 bg-white/30 backdrop-blur-sm z-0"></div>
-
-                    <div className="relative z-10 w-full h-full flex items-center justify-center">
-                        {/* Abstract compositions */}
-                        <motion.div
-                            animate={{ y: [0, -10, 0] }}
-                            transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-                            className="absolute top-20 right-20 w-32 h-32 bg-blue-200 rounded-full blur-xl opacity-60"
-                        ></motion.div>
-                        <motion.div
-                            animate={{ y: [0, 15, 0] }}
-                            transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }}
-                            className="absolute bottom-20 left-20 w-40 h-40 bg-pink-200 rounded-full blur-xl opacity-60"
-                        ></motion.div>
-
-                        {/* "Character" approximation */}
-                        <div className="relative">
-                            <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ repeat: Infinity, duration: 20, ease: "linear" }}
-                                className="w-64 h-64 bg-gradient-to-tr from-green-200 to-teal-100 rounded-[3rem] shadow-xl rotate-45 flex items-center justify-center"
-                            >
-                                <div className="w-48 h-48 bg-white/40 rounded-full backdrop-blur-md"></div>
-                            </motion.div>
-
-                            {/* Cute face elements */}
-                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                                <div className="flex space-x-8 mb-2">
-                                    <div className="w-4 h-4 bg-gray-800 rounded-full"></div>
-                                    <div className="w-4 h-4 bg-gray-800 rounded-full"></div>
-                                </div>
-                                <div className="w-6 h-3 border-b-4 border-gray-800 rounded-full"></div>
-                            </div>
-                        </div>
-                    </div>
+                <div className="w-full md:w-1/2 bg-[#f0f0f3] relative hidden md:flex items-center justify-center overflow-hidden rounded-r-[2rem]">
+                    <img
+                        src={signinImage}
+                        alt="Sign In Illustration"
+                        className="w-full h-full object-cover"
+                    />
                 </div>
             </motion.div>
         </div>
