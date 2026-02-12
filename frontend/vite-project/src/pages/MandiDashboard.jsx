@@ -12,6 +12,7 @@ const TABS = [
     { id: 'overview', label: '📊 Overview' }, { id: 'stress', label: '⚠️ Stress' },
     { id: 'forecast', label: '📈 Forecast' }, { id: 'trucks', label: '🚛 Trucks' },
     { id: 'interventions', label: '💡 Actions' }, { id: 'scenario', label: '🔮 Scenario' },
+    { id: 'alerts', label: '🚨 Alerts' },
 ]
 
 const CROP_IMGS = {
@@ -93,6 +94,27 @@ export default function MandiDashboard() {
     const [demandSurge, setDemandSurge] = useState(0)
     const [transportDelay, setTransportDelay] = useState(0)
     const [expandedCrop, setExpandedCrop] = useState(null)
+    const [simLevel, setSimLevel] = useState(1)
+    const [alertResult, setAlertResult] = useState(null)
+    const [alertLoading, setAlertLoading] = useState(false)
+    const [alertHistory, setAlertHistory] = useState([])
+
+    const SIM_LEVELS = ['low', 'moderate', 'high', 'critical']
+    const triggerAlert = async () => {
+        setAlertLoading(true); setAlertResult(null)
+        try {
+            const level = SIM_LEVELS[simLevel]
+            const stressData = stress || { risk_score: simLevel * 25, signals: [] }
+            const res = await api.post('/mandi/supply-chain/alert-simulate', {
+                risk_level: level, risk_score: stressData.risk_score,
+                message: `FoodChain Alert — ${level.toUpperCase()} risk (Score: ${stressData.risk_score}/100)`,
+                signals: stressData.signals?.map(s => ({ title: s.title })) || [],
+            })
+            setAlertResult(res.data)
+            setAlertHistory(prev => [{ ...res.data, timestamp: new Date().toLocaleTimeString() }, ...prev].slice(0, 10))
+        } catch (e) { setAlertResult({ errors: [e.message] }) }
+        setAlertLoading(false)
+    }
 
     useEffect(() => {
         const u = JSON.parse(localStorage.getItem('user') || '{}')
@@ -509,6 +531,85 @@ export default function MandiDashboard() {
                             </div>
                         )}
                     </>)}
+                </div>)}
+
+                {/* ═══ ALERTS ═══ */}
+                {tab === 'alerts' && (<div className="space-y-6">
+                    <div className="p-6 rounded-2xl border-2 border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-red-500/5">
+                        <h3 className="text-sm font-black mb-1">🚨 Stress Alert Simulation</h3>
+                        <p className="text-xs text-white/40 mb-6">Test the alert system. Different risk levels trigger different communication channels.</p>
+
+                        {/* Level selector */}
+                        <div className="grid grid-cols-4 gap-2 mb-6">
+                            {[{ l: 'Low', i: '🟢', d: 'In-app notification only', c: 'border-green-500/30 bg-green-500/10' }, { l: 'Moderate', i: '🟡', d: 'In-app notification only', c: 'border-yellow-500/30 bg-yellow-500/10' }, { l: 'High', i: '🟠', d: 'SMS sent to all contacts', c: 'border-orange-500/30 bg-orange-500/10' }, { l: 'Critical', i: '🔴', d: 'Phone call + SMS to all', c: 'border-red-500/30 bg-red-500/10' }].map((lv, idx) => (
+                                <button key={lv.l} onClick={() => setSimLevel(idx)}
+                                    className={`p-4 rounded-xl border-2 text-center transition-all ${simLevel === idx ? lv.c + ' scale-[1.03] shadow-lg' : 'border-white/[0.06] bg-white/[0.02] opacity-50 hover:opacity-80'}`}>
+                                    <span className="text-2xl">{lv.i}</span>
+                                    <div className="text-xs font-bold mt-1">{lv.l}</div>
+                                    <div className="text-[9px] text-white/40 mt-0.5">{lv.d}</div>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* What will happen */}
+                        <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] mb-4">
+                            <div className="text-xs font-semibold text-white/50 mb-2">What happens when triggered:</div>
+                            <div className="space-y-1.5">
+                                <div className="flex items-center gap-2 text-xs"><span>🔔</span><span className="text-white/60">In-app notification dispatched</span><span className="text-green-400 text-[9px] font-bold">ALWAYS</span></div>
+                                {simLevel >= 2 && <div className="flex items-center gap-2 text-xs"><span>📱</span><span className="text-white/60">SMS to +91 96201 46061 & +91 91082 08731</span><span className="text-orange-400 text-[9px] font-bold">HIGH+</span></div>}
+                                {simLevel >= 3 && <div className="flex items-center gap-2 text-xs"><span>📞</span><span className="text-white/60">Phone call to +91 96201 46061 & +91 91082 08731</span><span className="text-red-400 text-[9px] font-bold">CRITICAL</span></div>}
+                            </div>
+                        </div>
+
+                        <button onClick={triggerAlert} disabled={alertLoading}
+                            className={`w-full py-4 rounded-xl text-sm font-black transition-all ${alertLoading ? 'bg-white/10 text-white/30' : simLevel >= 3 ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/30' : simLevel >= 2 ? 'bg-orange-500 hover:bg-orange-400 text-black shadow-lg shadow-orange-500/30' : 'bg-white/10 hover:bg-white/15 text-white'}`}>
+                            {alertLoading ? '⏳ Sending alerts...' : `🚨 Trigger ${SIM_LEVELS[simLevel].toUpperCase()} Alert`}
+                        </button>
+                    </div>
+
+                    {/* Result */}
+                    {alertResult && (
+                        <div className={`p-5 rounded-2xl border-2 ${alertResult.errors?.length ? 'border-red-500/25 bg-red-500/5' : 'border-green-500/25 bg-green-500/5'}`}>
+                            <h4 className="text-xs font-bold uppercase tracking-wider mb-3">{alertResult.errors?.length ? '❌ Some Errors' : '✅ Alert Dispatched'}</h4>
+                            <div className="space-y-2">
+                                {alertResult.actions_taken?.map((a, i) => (
+                                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03]">
+                                        <span className="text-lg">{a.type === 'call' ? '📞' : a.type === 'sms' ? '📱' : a.type === 'notification' ? '🔔' : 'ℹ️'}</span>
+                                        <div className="flex-1">
+                                            <div className="text-xs font-medium">{a.detail}</div>
+                                            {a.sid && <div className="text-[9px] text-white/20 font-mono">SID: {a.sid}</div>}
+                                        </div>
+                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${a.status === 'sent' || a.status === 'initiated' ? 'bg-green-500/20 text-green-400' : 'bg-white/10 text-white/40'}`}>{a.status}</span>
+                                    </div>
+                                ))}
+                                {alertResult.errors?.map((e, i) => (
+                                    <div key={i} className="p-3 rounded-xl bg-red-500/10 text-xs text-red-400">{e}</div>
+                                ))}
+                            </div>
+                            {alertResult.numbers_contacted?.length > 0 && (
+                                <div className="mt-3 text-[10px] text-white/30">Contacted: {alertResult.numbers_contacted.join(', ')}</div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* History */}
+                    {alertHistory.length > 0 && (
+                        <div className="p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+                            <h4 className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">📋 Alert History</h4>
+                            <div className="space-y-2">
+                                {alertHistory.map((h, i) => (
+                                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] transition-all">
+                                        <span className="text-lg">{h.risk_level === 'critical' ? '🔴' : h.risk_level === 'high' ? '🟠' : h.risk_level === 'moderate' ? '🟡' : '🟢'}</span>
+                                        <div className="flex-1">
+                                            <div className="text-xs font-bold capitalize">{h.risk_level} Alert (Score: {h.risk_score})</div>
+                                            <div className="text-[10px] text-white/30">{h.actions_taken?.length} actions · {h.timestamp}</div>
+                                        </div>
+                                        {h.errors?.length > 0 && <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[9px]">{h.errors.length} error(s)</span>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>)}
 
             </div>

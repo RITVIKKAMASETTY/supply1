@@ -270,3 +270,134 @@ def supply_interventions():
 @router.post("/supply-chain/scenario")
 def supply_scenario(req: ScenarioRequest):
     return run_scenario(req.rain_days, req.demand_surge_pct, req.transport_delay_pct)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  STRESS ALERT SIMULATION (Twilio SMS + Calls)
+# ═════════════════════════════════════════════════════════════════════════════
+
+import os
+from twilio.rest import Client as TwilioClient
+
+ALERT_NUMBERS = ["+919620146061", "+919108208731"]
+
+TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_FROM = os.getenv("TWILIO_PHONE_NUMBER")
+
+
+class AlertSimRequest(BaseModel):
+    risk_level: str  # "low", "moderate", "high", "critical"
+    risk_score: int = 50
+    message: str = ""
+    signals: list = []
+
+
+@router.post("/supply-chain/alert-simulate")
+def alert_simulate(req: AlertSimRequest):
+    """
+    Simulate stress alert based on risk level:
+    - Low/Moderate: in-app notification only
+    - High: send SMS to all numbers
+    - Critical: make phone call to all numbers
+    """
+    level = req.risk_level.lower()
+    msg = req.message or f"⚠️ FoodChain Mandi Alert — Risk Level: {level.upper()} (Score: {req.risk_score}/100)"
+    if req.signals:
+        msg += " | Signals: " + "; ".join(s if isinstance(s, str) else s.get("title", "") for s in req.signals[:3])
+
+    result = {
+        "risk_level": level,
+        "risk_score": req.risk_score,
+        "actions_taken": [],
+        "numbers_contacted": [],
+        "errors": [],
+    }
+
+    # Always do in-app notification
+    result["actions_taken"].append({
+        "type": "notification",
+        "status": "sent",
+        "detail": f"In-app alert dispatched: {level.upper()} risk detected",
+    })
+
+    if level in ("low", "moderate"):
+        # Just notification, no external action
+        result["actions_taken"].append({
+            "type": "info",
+            "status": "skipped",
+            "detail": f"External alerts not triggered for {level} risk level",
+        })
+        return result
+
+    # High risk → SMS
+    if level == "high":
+        if not all([TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM]):
+            result["errors"].append("Twilio credentials not configured")
+            return result
+
+        client = TwilioClient(TWILIO_SID, TWILIO_TOKEN)
+        for number in ALERT_NUMBERS:
+            try:
+                sms = client.messages.create(
+                    body=msg,
+                    from_=TWILIO_FROM,
+                    to=number,
+                )
+                result["actions_taken"].append({
+                    "type": "sms",
+                    "status": "sent",
+                    "detail": f"SMS sent to {number}",
+                    "sid": sms.sid,
+                })
+                result["numbers_contacted"].append(number)
+            except Exception as e:
+                result["errors"].append(f"SMS to {number} failed: {str(e)}")
+        return result
+
+    # Critical → Phone call
+    if level == "critical":
+        if not all([TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM]):
+            result["errors"].append("Twilio credentials not configured")
+            return result
+
+        client = TwilioClient(TWILIO_SID, TWILIO_TOKEN)
+        twiml_msg = f"<Response><Say voice='alice'>URGENT. FoodChain Mandi Critical Alert. Risk score {req.risk_score} out of 100. Immediate action required. Please check your dashboard for details.</Say><Pause length='1'/><Say voice='alice'>Repeating. Critical supply chain disruption detected. Log in to your FoodChain dashboard immediately.</Say></Response>"
+
+        for number in ALERT_NUMBERS:
+            try:
+                call = client.calls.create(
+                    twiml=twiml_msg,
+                    from_=TWILIO_FROM,
+                    to=number,
+                )
+                result["actions_taken"].append({
+                    "type": "call",
+                    "status": "initiated",
+                    "detail": f"Phone call to {number}",
+                    "sid": call.sid,
+                })
+                result["numbers_contacted"].append(number)
+            except Exception as e:
+                result["errors"].append(f"Call to {number} failed: {str(e)}")
+
+        # Also send SMS for critical
+        for number in ALERT_NUMBERS:
+            try:
+                sms = client.messages.create(
+                    body=f"🚨 CRITICAL: {msg}",
+                    from_=TWILIO_FROM,
+                    to=number,
+                )
+                result["actions_taken"].append({
+                    "type": "sms",
+                    "status": "sent",
+                    "detail": f"Backup SMS to {number}",
+                    "sid": sms.sid,
+                })
+            except Exception as e:
+                result["errors"].append(f"Backup SMS to {number} failed: {str(e)}")
+
+        return result
+
+    return result
