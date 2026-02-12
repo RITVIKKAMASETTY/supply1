@@ -60,11 +60,10 @@ export default function HomePage() {
                     <span className="text-lg font-semibold tracking-tight">FoodChain AI</span>
                 </div>
                 <div className="flex items-center gap-6 text-sm text-white/60">
-                    <a href="#" className="hover:text-white transition-colors">About</a>
-                    <a href="#" className="hover:text-white transition-colors">Docs</a>
-                    <button className="px-4 py-2 rounded-full bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-all border border-white/10">
-                        Get Started
-                    </button>
+                    <Link to="/login" className="hover:text-white transition-colors">Login</Link>
+                    <Link to="/register" className="px-4 py-2 rounded-full bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-all border border-white/10">
+                        Register
+                    </Link>
                 </div>
             </nav>
 
