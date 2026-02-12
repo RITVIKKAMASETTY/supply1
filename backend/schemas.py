@@ -113,3 +113,74 @@ class RetailerMandiOrderResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ── Mandi Owner Profile ────────────────────────────────────────────────────
+class MandiOwnerProfileUpdate(BaseModel):
+    contact: Optional[str] = Field(None, max_length=20)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    language: Optional[str] = Field(None, max_length=50)
+
+
+class MandiOwnerProfileResponse(BaseModel):
+    id: int
+    user_id: int
+    language: Optional[str]
+    user: Optional[UserResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ── Mandi Items ─────────────────────────────────────────────────────────────
+class MandiItemCreate(BaseModel):
+    item_name: str = Field(..., max_length=100)
+    current_qty: Optional[float] = 0
+
+
+class MandiItemUpdate(BaseModel):
+    item_name: Optional[str] = Field(None, max_length=100)
+    current_qty: Optional[float] = None
+
+
+class MandiItemResponse(BaseModel):
+    id: int
+    mandi_owner_id: int
+    item_name: Optional[str]
+    current_qty: Optional[float]
+
+    class Config:
+        from_attributes = True
+
+
+# ── Mandi ↔ Farmer Orders ──────────────────────────────────────────────────
+class MandiFarmerOrderCreate(BaseModel):
+    source: Optional[str] = Field(None, max_length=150)
+    destination: Optional[str] = Field(None, max_length=150)
+    item: Optional[str] = Field(None, max_length=100)
+    start_time: Optional[datetime] = None
+    price_per_kg: Optional[float] = None
+    order_date: Optional[datetime] = None
+
+
+class MandiFarmerOrderUpdate(BaseModel):
+    source: Optional[str] = Field(None, max_length=150)
+    destination: Optional[str] = Field(None, max_length=150)
+    item: Optional[str] = Field(None, max_length=100)
+    start_time: Optional[datetime] = None
+    price_per_kg: Optional[float] = None
+    order_date: Optional[datetime] = None
+
+
+class MandiFarmerOrderResponse(BaseModel):
+    id: int
+    source: Optional[str]
+    destination: Optional[str]
+    item: Optional[str]
+    start_time: Optional[datetime]
+    price_per_kg: Optional[float]
+    order_date: Optional[datetime]
+
+    class Config:
+        from_attributes = True

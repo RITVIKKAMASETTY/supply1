@@ -16,6 +16,8 @@ from schemas import UserRegister, UserLogin, Token, UserResponse
 from auth import verify_password, get_password_hash, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from farmer.routes import router as farmer_router
 from retailer.agent import run_demand_agent
+from mandi.routes import router as mandi_router
+from mandi.agent import run_mandi_agent
 
 logger = logging.getLogger("server")
 
@@ -24,13 +26,20 @@ scheduler = BackgroundScheduler()
 
 
 def _scheduled_agent_job():
-    """Wrapper called by APScheduler."""
+    """Wrapper called by APScheduler — runs both agents."""
     logger.info("⏰ Cron triggered: running demand agent...")
     try:
         result = run_demand_agent()
-        logger.info(f"Agent finished: {result[:200]}")
+        logger.info(f"Retailer agent finished: {result[:200]}")
     except Exception as e:
-        logger.error(f"Agent failed: {e}", exc_info=True)
+        logger.error(f"Retailer agent failed: {e}", exc_info=True)
+
+    logger.info("⏰ Cron triggered: running mandi agent...")
+    try:
+        result = run_mandi_agent()
+        logger.info(f"Mandi agent finished: {result[:200]}")
+    except Exception as e:
+        logger.error(f"Mandi agent failed: {e}", exc_info=True)
 
 
 @asynccontextmanager
@@ -180,8 +189,9 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         "user_id": user.id
     }
 
-# Register retailer routes
+# Register routes
 app.include_router(retailer_router)
+app.include_router(mandi_router)
 
 @app.get("/api/health")
 def health_check():
@@ -194,6 +204,16 @@ def trigger_agent_manually():
     """Manually trigger the demand-alert agent (for testing)."""
     try:
         result = run_demand_agent()
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+
+@app.post("/api/agent/mandi/run", tags=["Agent"])
+def trigger_mandi_agent_manually():
+    """Manually trigger the mandi supply-chain agent (for testing)."""
+    try:
+        result = run_mandi_agent()
         return {"status": "success", "result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
