@@ -71,10 +71,11 @@ export default function RetailerLandingPage() {
                     <a href="#features" className="hover:text-white transition-colors">Features</a>
                     <a href="#metrics" className="hover:text-white transition-colors">Metrics</a>
                     <a href="#how" className="hover:text-white transition-colors">How it Works</a>
+                    <Link to="/login" className="hover:text-white transition-colors">Login</Link>
                 </div>
-                <button className="px-5 py-2.5 rounded-full bg-teal-500 text-black text-sm font-semibold hover:bg-teal-400 transition-all hover:shadow-lg hover:shadow-teal-500/25 active:scale-95">
+                <Link to="/register" className="px-5 py-2.5 rounded-full bg-teal-500 text-black text-sm font-semibold hover:bg-teal-400 transition-all hover:shadow-lg hover:shadow-teal-500/25 active:scale-95">
                     Start Free
-                </button>
+                </Link>
             </nav>
 
             {/* HERO */}
@@ -94,11 +95,11 @@ export default function RetailerLandingPage() {
                             AI-powered demand forecasting, smart inventory, and dynamic pricing — all managed through voice in your language.
                         </p>
                         <div className="flex flex-wrap gap-4">
-                            <button className="group px-8 py-4 rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 text-black font-semibold hover:shadow-2xl hover:shadow-teal-500/30 transition-all active:scale-95 flex items-center gap-2">
+                            <Link to="/retailer/dashboard" className="group px-8 py-4 rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 text-black font-semibold hover:shadow-2xl hover:shadow-teal-500/30 transition-all active:scale-95 flex items-center gap-2">
                                 Optimize My Store
                                 <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
-                            </button>
-                            <button className="px-8 py-4 rounded-full border border-white/10 text-white/70 font-medium hover:bg-white/5 transition-all">See Demo</button>
+                            </Link>
+                            <a href="#features" className="px-8 py-4 rounded-full border border-white/10 text-white/70 font-medium hover:bg-white/5 transition-all">See Demo</a>
                         </div>
                     </div>
 
@@ -201,7 +202,7 @@ export default function RetailerLandingPage() {
                         <div className="rounded-3xl border border-teal-500/20 bg-gradient-to-b from-teal-500/5 to-transparent p-12 sm:p-16 relative overflow-hidden">
                             <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 via-transparent to-cyan-500/5" />
                             <div className="relative z-10"><h2 className="text-4xl sm:text-5xl font-black tracking-tighter mb-4">Transform your store today</h2><p className="text-white/40 text-lg mb-8 max-w-lg mx-auto">Join thousands of retailers using AI to eliminate waste and boost revenue.</p>
-                                <button className="px-10 py-4 rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 text-black font-bold text-lg hover:shadow-2xl hover:shadow-teal-500/30 transition-all active:scale-95">Start Free Today</button>
+                                <Link to="/register" className="inline-block px-10 py-4 rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 text-black font-bold text-lg hover:shadow-2xl hover:shadow-teal-500/30 transition-all active:scale-95">Start Free Today</Link>
                             </div>
                         </div>
                     </FadeIn>

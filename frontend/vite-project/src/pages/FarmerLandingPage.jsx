@@ -83,10 +83,11 @@ export default function FarmerLandingPage() {
                     <a href="#features" className="hover:text-white transition-colors">Features</a>
                     <a href="#how-it-works" className="hover:text-white transition-colors">How it Works</a>
                     <a href="#stats" className="hover:text-white transition-colors">Impact</a>
+                    <Link to="/login" className="hover:text-white transition-colors">Login</Link>
                 </div>
-                <button className="px-5 py-2.5 rounded-full bg-green-500 text-black text-sm font-semibold hover:bg-green-400 transition-all hover:shadow-lg hover:shadow-green-500/25 active:scale-95">
+                <Link to="/register" className="px-5 py-2.5 rounded-full bg-green-500 text-black text-sm font-semibold hover:bg-green-400 transition-all hover:shadow-lg hover:shadow-green-500/25 active:scale-95">
                     Start Free
-                </button>
+                </Link>
             </nav>
 
             {/* === HERO === */}
@@ -107,13 +108,13 @@ export default function FarmerLandingPage() {
                             AI that watches your crops, predicts mandi prices, warns you about weather — and speaks your language. All through voice.
                         </p>
                         <div className="flex flex-wrap gap-4">
-                            <button className="group px-8 py-4 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-black font-semibold hover:shadow-2xl hover:shadow-green-500/30 transition-all active:scale-95 flex items-center gap-2">
+                            <Link to="/farmer/dashboard" className="group px-8 py-4 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-black font-semibold hover:shadow-2xl hover:shadow-green-500/30 transition-all active:scale-95 flex items-center gap-2">
                                 Get Started Free
                                 <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
-                            </button>
-                            <button className="px-8 py-4 rounded-full border border-white/10 text-white/70 font-medium hover:bg-white/5 hover:border-white/20 transition-all">
+                            </Link>
+                            <a href="#features" className="px-8 py-4 rounded-full border border-white/10 text-white/70 font-medium hover:bg-white/5 hover:border-white/20 transition-all">
                                 Watch Demo
-                            </button>
+                            </a>
                         </div>
                     </div>
 
@@ -237,9 +238,9 @@ export default function FarmerLandingPage() {
                             <div className="relative z-10">
                                 <h2 className="text-4xl sm:text-5xl font-black tracking-tighter mb-4">Ready to grow smarter?</h2>
                                 <p className="text-white/40 text-lg mb-8 max-w-lg mx-auto">Join thousands of farmers already using AI to protect their crops and boost their income.</p>
-                                <button className="px-10 py-4 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-black font-bold text-lg hover:shadow-2xl hover:shadow-green-500/30 transition-all active:scale-95">
+                                <Link to="/register" className="inline-block px-10 py-4 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 text-black font-bold text-lg hover:shadow-2xl hover:shadow-green-500/30 transition-all active:scale-95">
                                     Start Free Today
-                                </button>
+                                </Link>
                             </div>
                         </div>
                     </FadeIn>

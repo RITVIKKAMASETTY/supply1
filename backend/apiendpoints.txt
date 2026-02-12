@@ -1,0 +1,393 @@
+================================================================================
+  SUPPLY CHAIN MANAGEMENT API — ENDPOINT REFERENCE (for Frontend Use)
+================================================================================
+
+Base URL:  http://localhost:8001
+Auth:      JWT Bearer token  →  Authorization: Bearer <token>
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. GENERAL (No Auth Required)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET  /
+  → API info & version
+  Response: { message, version, endpoints }
+
+GET  /api/health
+  → Health check
+  Response: { status: "healthy", service: "Supply Chain API" }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. AUTH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+POST /api/register
+  → Register a new user (creates role-specific profile automatically)
+  Body: {
+    "username":  string (required, 3-100 chars),
+    "password":  string (required, min 6 chars),
+    "role":      "farmer" | "mandi_owner" | "retailer" | "admin" (required),
+    "contact":   string (optional, max 20 chars),
+    "latitude":  float  (optional),
+    "longitude": float  (optional),
+    "language":  string (optional, max 50 chars)
+  }
+  Response (201): { id, username, role, contact, latitude, longitude }
+
+POST /api/login
+  → Login, returns JWT token
+  Body: {
+    "username": string,
+    "password": string
+  }
+  Response: {
+    "access_token": string,
+    "token_type":   "bearer",
+    "role":         string,
+    "username":     string,
+    "user_id":      int
+  }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. FARMER ENDPOINTS  (prefix: /api/farmer)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Auth: Bearer token with role "farmer"
+
+── Profile ──
+
+GET  /api/farmer/profile
+  → Get farmer's profile
+  Response: { id, user_id, language, user: { id, username, role, contact, latitude, longitude } }
+
+PUT  /api/farmer/profile
+  → Update farmer profile
+  Body: {
+    "contact":   string (optional),
+    "latitude":  float  (optional),
+    "longitude": float  (optional),
+    "language":  string (optional)
+  }
+  Response: same as GET /profile
+
+── Crops (CRUD) ──
+
+GET  /api/farmer/crops
+  → List all farmer's crops
+  Response: [ { id, farmer_id, name, quantity, planted_date }, ... ]
+
+POST /api/farmer/crops
+  → Add a new crop
+  Body: {
+    "name":         string (required, max 100),
+    "quantity":     float  (optional),
+    "planted_date": "YYYY-MM-DD" (optional)
+  }
+  Response (201): { id, farmer_id, name, quantity, planted_date }
+
+GET  /api/farmer/crops/{crop_id}
+  → Get single crop by ID
+  Response: { id, farmer_id, name, quantity, planted_date }
+
+PUT  /api/farmer/crops/{crop_id}
+  → Update a crop
+  Body: {
+    "name":         string (optional),
+    "quantity":     float  (optional),
+    "planted_date": "YYYY-MM-DD" (optional)
+  }
+  Response: same as GET
+
+DELETE /api/farmer/crops/{crop_id}
+  → Delete a crop
+  Response: 204 No Content
+
+── AI / Voice / Map (No DB Auth — works without login) ──
+
+GET  /api/farmer/mandis?lat=12.97&lng=77.59&crop=tomato
+  → Get nearby mandis with current prices
+  Response: {
+    "mandis": [
+      { id, name, lat, lng, district, distance_km, price_per_kg,
+        transport_cost, travel_time_min }
+    ],
+    "crop": string,
+    "total": int
+  }
+
+POST /api/farmer/analyze
+  → AI-powered sell analysis (best time, best mandi, trade-offs)
+  Body: {
+    "crop":     string (required),
+    "quantity":  float (required),
+    "lat":       float (required),
+    "lng":       float (required),
+    "location":  string (optional, e.g. "Tumkur, Karnataka")
+  }
+  Response: {
+    "ai_recommendation": { ... AI JSON with scenarios, best_mandi, etc. },
+    "mandis":     [ top 5 mandis with prices ],
+    "weather":    { ... Tavily weather data },
+    "market_info": { ... Tavily market search results },
+    "alerts":     [ { message, level: "critical"|"warning"|"info", timestamp } ],
+    "request":    { crop, quantity }
+  }
+
+POST /api/farmer/voice
+  → Process voice command (parses text → triggers action)
+  Body: {
+    "text":     string (required, e.g. "sell 100kg tomato"),
+    "lat":      float  (default 12.97),
+    "lng":      float  (default 77.59),
+    "location": string (optional)
+  }
+  Response (depends on parsed action):
+    if "sell": { parsed_command, analysis: { ...full analysis response } }
+    if "check_weather": { parsed_command, weather: { ... } }
+    if "check_price":   { parsed_command, mandis: [...], crop }
+    else: { parsed_command, message: "Command not understood..." }
+
+POST /api/farmer/weather
+  → Get weather for a location
+  Body: {
+    "lat":      float (required),
+    "lng":      float (required),
+    "location": string (optional)
+  }
+  Response: { ...Tavily weather search results }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. RETAILER ENDPOINTS  (prefix: /api/retailer)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Auth: Bearer token with role "retailer"
+
+── Profile ──
+
+GET  /api/retailer/profile
+  → Get retailer's profile
+  Response: { id, user_id, language, user: { id, username, role, contact, latitude, longitude } }
+
+PUT  /api/retailer/profile
+  → Update retailer profile
+  Body: {
+    "contact":   string (optional),
+    "latitude":  float  (optional),
+    "longitude": float  (optional),
+    "language":  string (optional)
+  }
+  Response: same as GET /profile
+
+── Items (Inventory CRUD) ──
+
+GET  /api/retailer/items
+  → List all retailer's items
+  Response: [ { id, retailer_id, name, item, quantity }, ... ]
+
+POST /api/retailer/items
+  → Add new item to inventory
+  Body: {
+    "name":     string (required, max 100),
+    "item":     string (required, max 100),
+    "quantity": float  (optional)
+  }
+  Response (201): { id, retailer_id, name, item, quantity }
+
+GET  /api/retailer/items/{item_id}
+  → Get single item
+  Response: { id, retailer_id, name, item, quantity }
+
+PUT  /api/retailer/items/{item_id}
+  → Update item
+  Body: { "name": optional, "item": optional, "quantity": optional }
+  Response: same as GET
+
+DELETE /api/retailer/items/{item_id}
+  → Delete item
+  Response: 204 No Content
+
+── Orders (Retailer ↔ Mandi) ──
+
+GET  /api/retailer/orders
+  → List all retailer-mandi orders
+  Response: [ { id, src_lat, src_long, dest_lat, dest_long, item,
+                start_time, price_per_kg, order_date }, ... ]
+
+POST /api/retailer/orders
+  → Create new order
+  Body: {
+    "src_lat":      float    (optional),
+    "src_long":     float    (optional),
+    "dest_lat":     float    (optional),
+    "dest_long":    float    (optional),
+    "item":         string   (optional, max 100),
+    "start_time":   datetime (optional, ISO format),
+    "price_per_kg": float    (optional),
+    "order_date":   datetime (optional, ISO format)
+  }
+  Response (201): { id, src_lat, src_long, dest_lat, dest_long, item,
+                    start_time, price_per_kg, order_date }
+
+GET  /api/retailer/orders/{order_id}
+  → Get single order
+  Response: same as above
+
+PUT  /api/retailer/orders/{order_id}
+  → Update order (same body fields as POST, all optional)
+  Response: same as GET
+
+DELETE /api/retailer/orders/{order_id}
+  → Delete order
+  Response: 204 No Content
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. MANDI ENDPOINTS  (prefix: /api/mandi)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Auth: Bearer token with role "mandi_owner"
+
+── Profile ──
+
+GET  /api/mandi/profile
+  → Get mandi owner's profile
+  Response: { id, user_id, language, user: { id, username, role, contact, latitude, longitude } }
+
+PUT  /api/mandi/profile
+  → Update mandi owner profile
+  Body: {
+    "contact":   string (optional),
+    "latitude":  float  (optional),
+    "longitude": float  (optional),
+    "language":  string (optional)
+  }
+  Response: same as GET /profile
+
+── Items (Inventory CRUD) ──
+
+GET  /api/mandi/items
+  → List all mandi's items
+  Response: [ { id, mandi_owner_id, item_name, current_qty }, ... ]
+
+POST /api/mandi/items
+  → Add new item
+  Body: {
+    "item_name":   string (required, max 100),
+    "current_qty": float  (optional, default 0)
+  }
+  Response (201): { id, mandi_owner_id, item_name, current_qty }
+
+GET  /api/mandi/items/{item_id}
+  → Get single item
+  Response: { id, mandi_owner_id, item_name, current_qty }
+
+PUT  /api/mandi/items/{item_id}
+  → Update item
+  Body: { "item_name": optional, "current_qty": optional }
+  Response: same as GET
+
+DELETE /api/mandi/items/{item_id}
+  → Delete item
+  Response: 204 No Content
+
+── Orders (Mandi ↔ Farmer) ──
+
+GET  /api/mandi/orders
+  → List all mandi-farmer orders
+  Response: [ { id, src_lat, src_long, dest_lat, dest_long, item,
+                start_time, price_per_kg, order_date }, ... ]
+
+POST /api/mandi/orders
+  → Create new order
+  Body: {
+    "src_lat":      float    (optional),
+    "src_long":     float    (optional),
+    "dest_lat":     float    (optional),
+    "dest_long":    float    (optional),
+    "item":         string   (optional, max 100),
+    "start_time":   datetime (optional, ISO format),
+    "price_per_kg": float    (optional),
+    "order_date":   datetime (optional, ISO format)
+  }
+  Response (201): same fields as body + id
+
+GET  /api/mandi/orders/{order_id}
+  → Get single order
+
+PUT  /api/mandi/orders/{order_id}
+  → Update order (same body as POST, all optional)
+
+DELETE /api/mandi/orders/{order_id}
+  → Delete order
+  Response: 204 No Content
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. AGENT ENDPOINTS (Admin / Testing — No Auth)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+POST /api/agent/run
+  → Manually trigger retailer demand-alert agent
+  Response: { status: "success", result: string }
+
+POST /api/agent/mandi/run
+  → Manually trigger mandi supply-chain agent
+  Response: { status: "success", result: string }
+
+POST /api/agent/farmer/run
+  → Manually trigger farmer advisory agent
+  Response: { status: "success", result: string }
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QUICK REFERENCE — FRONTEND api.js USAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  import api from './services/api';
+
+  // Login
+  const { data } = await api.post('/login', { username, password });
+  localStorage.setItem('token', data.access_token);
+
+  // Register
+  await api.post('/register', { username, password, role: 'farmer', ... });
+
+  // Farmer profile
+  const profile = await api.get('/farmer/profile');
+
+  // Farmer crops
+  const crops = await api.get('/farmer/crops');
+  await api.post('/farmer/crops', { name: 'Tomato', quantity: 100 });
+  await api.put('/farmer/crops/1', { quantity: 150 });
+  await api.delete('/farmer/crops/1');
+
+  // Farmer AI analysis (no auth needed)
+  await api.post('/farmer/analyze', { crop: 'tomato', quantity: 100, lat, lng });
+
+  // Retailer items
+  const items = await api.get('/retailer/items');
+  await api.post('/retailer/items', { name: 'Shop A', item: 'Tomato', quantity: 50 });
+
+  // Mandi items
+  const mandiItems = await api.get('/mandi/items');
+  await api.post('/mandi/items', { item_name: 'Onion', current_qty: 200 });
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DB MODELS REFERENCE (models.py)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  User:               id, username, password_hash, role, contact, latitude, longitude
+  Farmer:             id, user_id, language
+  Crop:               id, farmer_id, name, quantity, planted_date
+  MandiOwner:         id, user_id, language
+  MandiItem:          id, mandi_owner_id, item_name, current_qty
+  MandiFarmerOrder:   id, src_lat, src_long, dest_lat, dest_long, item, start_time, price_per_kg, order_date
+  Retailer:           id, user_id, language
+  RetailerItem:       id, retailer_id, name, item, quantity
+  RetailerMandiOrder: id, src_lat, src_long, dest_lat, dest_long, item, start_time, price_per_kg, order_date
+  Alert:              id, user_id, message, seen, created_at
+
+  Note: User.location was replaced with User.latitude + User.longitude (Numeric(10,7))
+  Note: Orders use src_lat/src_long/dest_lat/dest_long instead of source/destination strings

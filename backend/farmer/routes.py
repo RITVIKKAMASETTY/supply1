@@ -3,15 +3,16 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import random
+from datetime import datetime, timedelta
 
 from database import get_db
-from models import Farmer, Crop, User
+from models import Farmer, Crop, User, Alert
 from schemas import (
     FarmerProfileUpdate, FarmerProfileResponse,
     CropCreate, CropUpdate, CropResponse,
 )
 from auth import get_current_user, require_role
-from farmer.ai_advisor import get_ai_recommendation, parse_voice_command
+from farmer.ai_advisor import get_ai_recommendation, parse_voice_command, ask_farming_question
 from farmer.weather import get_weather_data, search_market_info
 from farmer.alerts import categorize_alerts
 
@@ -279,31 +280,139 @@ async def analyze_sell(req: AnalyzeRequest):
 
 @router.post("/voice")
 async def process_voice(cmd: VoiceCommand):
-    """Parse voice command and trigger appropriate action"""
+    """Parse voice command and trigger appropriate action — handles ALL farmer intents"""
     parsed = await parse_voice_command(cmd.text)
-    
-    if parsed.get("action") == "sell" and parsed.get("crop") and parsed.get("quantity"):
-        # Auto-trigger analysis
+    action = parsed.get("action", "unknown")
+
+    # ── SELL ──
+    if action == "sell" and parsed.get("crop"):
+        qty = parsed.get("quantity") or 100
+        crop = parsed["crop"]
         analysis = await analyze_sell(AnalyzeRequest(
-            crop=parsed["crop"],
-            quantity=parsed["quantity"],
-            lat=cmd.lat,
-            lng=cmd.lng,
-            location=cmd.location
+            crop=crop, quantity=qty,
+            lat=cmd.lat, lng=cmd.lng, location=cmd.location
         ))
+        # Enrich with timing factors
+        factors = []
+        if analysis.get("weather"):
+            w = analysis["weather"]
+            if isinstance(w, dict):
+                summary = w.get("summary", "")
+                if "rain" in summary.lower():
+                    factors.append({"icon": "🌧️", "factor": "Rain expected", "impact": "Prices may rise — transport harder", "suggestion": "wait"})
+                else:
+                    factors.append({"icon": "☀️", "factor": "Clear weather", "impact": "Good transport conditions", "suggestion": "sell"})
+        factors.append({"icon": "📈", "factor": "Market trend", "impact": "Prices trending based on recent data", "suggestion": "check chart"})
+        analysis["timing_factors"] = factors
+
+        # ── Price Forecast (7-day prediction) ──
+        price_range = CROP_PRICE_RANGES.get(crop.lower(), (20, 50))
+        base = (price_range[0] + price_range[1]) / 2
+        today = datetime.utcnow().date()
+        rng = random.Random(hash(crop) + today.toordinal())
+
+        # Simulate last 5 days of prices for the best mandi
+        best_mandi_name = (analysis.get("mandis") or [{}])[0].get("name", "APMC Yeshwanthpur")
+        prices_last5 = []
+        p = base + rng.uniform(-3, 3)
+        for _ in range(30):
+            p += rng.uniform(-2, 2.3)
+            p = max(price_range[0] * 0.7, min(price_range[1] * 1.3, p))
+            prices_last5.append(round(p, 2))
+        prices_last5 = prices_last5[-5:]  # last 5 days
+
+        # Calculate trend and project 7 days
+        avg_change = (prices_last5[-1] - prices_last5[0]) / len(prices_last5) if len(prices_last5) > 1 else 0
+        last_price = prices_last5[-1]
+        forecast = []
+        for i in range(7):
+            day_date = today + timedelta(days=i + 1)
+            predicted = round(max(price_range[0] * 0.7, last_price + avg_change * (i + 1) + random.uniform(-0.5, 0.5)), 2)
+            forecast.append({
+                "date": day_date.isoformat(),
+                "day_label": day_date.strftime("%a %d %b"),
+                "predicted_price": predicted,
+                "revenue": round(qty * predicted),
+            })
+
+        # Sell timing recommendation
+        today_price = last_price
+        max_forecast = max(forecast, key=lambda x: x["predicted_price"])
+        max_idx = forecast.index(max_forecast)
+
+        if max_forecast["predicted_price"] > today_price * 1.03:
+            # Price will rise >3% — wait
+            if max_idx <= 1:
+                sell_timing = {"action": "WAIT_2_DAYS", "reason": f"Price expected to rise to ₹{max_forecast['predicted_price']}/kg by {max_forecast['day_label']}", "best_day": max_forecast["day_label"], "best_price": max_forecast["predicted_price"]}
+            else:
+                sell_timing = {"action": "WAIT_WEEK", "reason": f"Price rising trend — peak ₹{max_forecast['predicted_price']}/kg expected on {max_forecast['day_label']}", "best_day": max_forecast["day_label"], "best_price": max_forecast["predicted_price"]}
+        else:
+            sell_timing = {"action": "SELL_TODAY", "reason": "Prices are stable or declining — selling today gives you the best return", "best_day": "Today", "best_price": today_price}
+
+        analysis["price_forecast"] = forecast
+        analysis["sell_timing"] = sell_timing
+        analysis["today_price"] = today_price
+
+        return {"parsed_command": parsed, "response_type": "sell_analysis", "analysis": analysis}
+
+    # ── GROW / PLANT ──
+    elif action == "grow" and parsed.get("crop"):
+        crop = parsed["crop"]
         return {
             "parsed_command": parsed,
-            "analysis": analysis
+            "response_type": "grow_confirm",
+            "crop": crop,
+            "message": f"Great! You're growing {crop}. I'll track prices for you.",
+            "spoken_summary": f"बहुत अच्छा! आप {crop} उगा रहे हैं। मैं आपके लिए कीमतें ट्रैक करूँगा।"
         }
-    elif parsed.get("action") == "check_weather":
+
+    # ── HARVEST ADVICE ──
+    elif action == "harvest_advice":
+        crop = parsed.get("crop", "")
+        age = parsed.get("age_months", "")
+        details = parsed.get("details", cmd.text)
+        question = f"Should I harvest {crop}?" + (f" It's {age} months old." if age else "") + f" {details}"
+        advice = await ask_farming_question(question, crop=crop, context=f"Age: {age} months" if age else "")
+        return {"parsed_command": parsed, "response_type": "advice_card", "advice": advice}
+
+    # ── FARMING ADVICE ──
+    elif action == "farming_advice":
+        crop = parsed.get("crop", "")
+        details = parsed.get("details", cmd.text)
+        advice = await ask_farming_question(details or cmd.text, crop=crop)
+        return {"parsed_command": parsed, "response_type": "advice_card", "advice": advice}
+
+    # ── GENERAL QUESTION ──
+    elif action == "general":
+        details = parsed.get("details", cmd.text)
+        advice = await ask_farming_question(details or cmd.text)
+        return {"parsed_command": parsed, "response_type": "advice_card", "advice": advice}
+
+    # ── CHECK WEATHER ──
+    elif action == "check_weather":
         weather = await get_weather_data(cmd.lat, cmd.lng, cmd.location)
-        return {"parsed_command": parsed, "weather": weather}
-    elif parsed.get("action") == "check_price":
+        return {"parsed_command": parsed, "response_type": "weather", "weather": weather}
+
+    # ── CHECK PRICE ──
+    elif action == "check_price":
         crop = parsed.get("crop", "tomato")
         mandis = get_mandis_with_prices(cmd.lat, cmd.lng, crop)
-        return {"parsed_command": parsed, "mandis": mandis[:5], "crop": crop}
+        return {"parsed_command": parsed, "response_type": "price_check", "mandis": mandis[:5], "crop": crop}
+
+    # ── UNKNOWN — try as general question ──
     else:
-        return {"parsed_command": parsed, "message": "Command not fully understood. Try: 'sell 100kg tomato' or 'check weather'"}
+        try:
+            advice = await ask_farming_question(cmd.text)
+            return {"parsed_command": parsed, "response_type": "advice_card", "advice": advice}
+        except:
+            return {"parsed_command": parsed, "response_type": "error", "message": "Sorry, I didn't understand. Try: 'sell 100kg tomato' or 'I grow wheat'"}
+
+
+@router.post("/ask")
+async def ask_question(cmd: VoiceCommand):
+    """General farming question endpoint — returns structured UI advice card"""
+    advice = await ask_farming_question(cmd.text, crop="", context=f"Location: {cmd.lat},{cmd.lng}")
+    return {"response_type": "advice_card", "advice": advice}
 
 
 @router.post("/weather")
@@ -311,3 +420,118 @@ async def get_weather(req: WeatherRequest):
     """Get weather for farmer's location"""
     weather = await get_weather_data(req.lat, req.lng, req.location)
     return weather
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  PRICE HISTORY  (simulated 30-day time-series)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@router.get("/price-history")
+async def get_price_history(crop: str = "tomato", days: int = 30):
+    """Returns simulated daily price history for a crop across mandis.
+    Uses random-walk seeded by crop name for deterministic-ish data."""
+    price_range = CROP_PRICE_RANGES.get(crop.lower(), (20, 50))
+    base_price = (price_range[0] + price_range[1]) / 2
+    mandi_names = [m["name"] for m in MOCK_MANDIS[:5]]
+    today = datetime.utcnow().date()
+
+    # Seed by crop so same crop returns consistent data within a session
+    rng = random.Random(hash(crop) + today.toordinal())
+
+    history = []
+    for mandi_name in mandi_names:
+        price = base_price + rng.uniform(-5, 5)
+        for d in range(days):
+            date_str = (today - timedelta(days=days - 1 - d)).isoformat()
+            # Random walk with mean reversion
+            price += rng.uniform(-2, 2.3)  # slight upward bias
+            price = max(price_range[0] * 0.7, min(price_range[1] * 1.3, price))
+            history.append({
+                "date": date_str,
+                "mandi_name": mandi_name,
+                "price_per_kg": round(price, 2)
+            })
+
+    return {"crop": crop, "days": days, "history": history}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  ALERTS  (from agent-generated DB alerts)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@router.get("/alerts")
+def get_farmer_alerts(
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """Get all alerts for the logged-in farmer, newest first."""
+    alerts = (
+        db.query(Alert)
+        .filter(Alert.user_id == current_user.id)
+        .order_by(Alert.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    return [
+        {
+            "id": a.id,
+            "message": a.message,
+            "seen": a.seen,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in alerts
+    ]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  SETUP  (one-step farm onboarding)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class FarmSetupRequest(BaseModel):
+    location_name: str = ""
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    crop: str = "tomato"
+    hectares: Optional[float] = None
+
+@router.put("/setup")
+def setup_farm(
+    payload: FarmSetupRequest,
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """One-step farm setup: updates location, creates initial crop."""
+    farmer = _get_farmer_profile(current_user, db)
+
+    # Update location if provided
+    if payload.lat is not None:
+        current_user.latitude = payload.lat
+    if payload.lng is not None:
+        current_user.longitude = payload.lng
+
+    db.commit()
+
+    # Create initial crop if farmer has no crops yet
+    existing_crops = db.query(Crop).filter(Crop.farmer_id == farmer.id).all()
+    crop_created = None
+    if not existing_crops:
+        crop = Crop(
+            farmer_id=farmer.id,
+            name=payload.crop,
+            quantity=0,
+            planted_date=datetime.utcnow().date(),
+        )
+        db.add(crop)
+        db.commit()
+        db.refresh(crop)
+        crop_created = {"id": crop.id, "name": crop.name}
+
+    db.refresh(farmer)
+    return {
+        "status": "ok",
+        "lat": float(current_user.latitude) if current_user.latitude else None,
+        "lng": float(current_user.longitude) if current_user.longitude else None,
+        "location_name": payload.location_name,
+        "crop_created": crop_created,
+        "total_crops": len(existing_crops) + (1 if crop_created else 0),
+    }
