@@ -1,13 +1,157 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
-from typing import Optional
+from sqlalchemy.orm import Session
+from typing import Optional, List
 import random
 
+from database import get_db
+from models import Farmer, Crop, User
+from schemas import (
+    FarmerProfileUpdate, FarmerProfileResponse,
+    CropCreate, CropUpdate, CropResponse,
+)
+from auth import get_current_user, require_role
 from farmer.ai_advisor import get_ai_recommendation, parse_voice_command
 from farmer.weather import get_weather_data, search_market_info
 from farmer.alerts import categorize_alerts
 
 router = APIRouter(tags=["farmer"])
+
+
+# ── Helper ──────────────────────────────────────────────────────────────────
+def _get_farmer_profile(user: User, db: Session) -> Farmer:
+    """Return the Farmer row for the authenticated user, or 404."""
+    farmer = db.query(Farmer).filter(Farmer.user_id == user.id).first()
+    if not farmer:
+        raise HTTPException(status_code=404, detail="Farmer profile not found")
+    return farmer
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  PROFILE
+# ═════════════════════════════════════════════════════════════════════════════
+
+@router.get("/profile", response_model=FarmerProfileResponse)
+def get_profile(
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """Get the logged-in farmer's profile."""
+    return _get_farmer_profile(current_user, db)
+
+
+@router.put("/profile", response_model=FarmerProfileResponse)
+def update_profile(
+    payload: FarmerProfileUpdate,
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """Update the farmer's profile (contact, lat/lng, language)."""
+    farmer = _get_farmer_profile(current_user, db)
+
+    if payload.contact is not None:
+        current_user.contact = payload.contact
+    if payload.latitude is not None:
+        current_user.latitude = payload.latitude
+    if payload.longitude is not None:
+        current_user.longitude = payload.longitude
+    if payload.language is not None:
+        farmer.language = payload.language
+
+    db.commit()
+    db.refresh(farmer)
+    return farmer
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  CROPS  (CRUD)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@router.get("/crops", response_model=List[CropResponse])
+def list_crops(
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """List all crops belonging to the logged-in farmer."""
+    farmer = _get_farmer_profile(current_user, db)
+    return db.query(Crop).filter(Crop.farmer_id == farmer.id).all()
+
+
+@router.post("/crops", response_model=CropResponse, status_code=status.HTTP_201_CREATED)
+def create_crop(
+    payload: CropCreate,
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """Add a new crop for the farmer."""
+    farmer = _get_farmer_profile(current_user, db)
+    crop = Crop(
+        farmer_id=farmer.id,
+        name=payload.name,
+        quantity=payload.quantity,
+        planted_date=payload.planted_date,
+    )
+    db.add(crop)
+    db.commit()
+    db.refresh(crop)
+    return crop
+
+
+@router.get("/crops/{crop_id}", response_model=CropResponse)
+def get_crop(
+    crop_id: int,
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """Get a single crop by ID."""
+    farmer = _get_farmer_profile(current_user, db)
+    crop = db.query(Crop).filter(
+        Crop.id == crop_id, Crop.farmer_id == farmer.id
+    ).first()
+    if not crop:
+        raise HTTPException(status_code=404, detail="Crop not found")
+    return crop
+
+
+@router.put("/crops/{crop_id}", response_model=CropResponse)
+def update_crop(
+    crop_id: int,
+    payload: CropUpdate,
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """Update an existing crop."""
+    farmer = _get_farmer_profile(current_user, db)
+    crop = db.query(Crop).filter(
+        Crop.id == crop_id, Crop.farmer_id == farmer.id
+    ).first()
+    if not crop:
+        raise HTTPException(status_code=404, detail="Crop not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(crop, key, value)
+
+    db.commit()
+    db.refresh(crop)
+    return crop
+
+
+@router.delete("/crops/{crop_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_crop(
+    crop_id: int,
+    current_user: User = Depends(require_role("farmer")),
+    db: Session = Depends(get_db),
+):
+    """Delete a crop."""
+    farmer = _get_farmer_profile(current_user, db)
+    crop = db.query(Crop).filter(
+        Crop.id == crop_id, Crop.farmer_id == farmer.id
+    ).first()
+    if not crop:
+        raise HTTPException(status_code=404, detail="Crop not found")
+    db.delete(crop)
+    db.commit()
 
 
 # ─── Request / Response Models ───

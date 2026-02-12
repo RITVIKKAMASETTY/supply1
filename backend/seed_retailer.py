@@ -14,8 +14,8 @@ BASE_URL = "http://localhost:8001"
 # ── 1. Register a retailer ──────────────────────────────────────────────────
 print("=== Registering retailer ===")
 register_resp = requests.post(f"{BASE_URL}/api/register", json={
-    "username": "ritvik",
-    "password": "1234",
+    "username": "ritvik1",
+    "password": "12345678",
     "role": "retailer",
     "contact": "+919876500001",
     "latitude": 12.9716,
@@ -33,8 +33,8 @@ else:
 # ── 2. Login to get JWT ─────────────────────────────────────────────────────
 print("\n=== Logging in ===")
 login_resp = requests.post(f"{BASE_URL}/api/login", json={
-    "username": "ritvik",
-    "password": "1234",
+    "username": "ritvik1",
+    "password": "12345678",
 })
 
 if login_resp.status_code != 200:
@@ -77,7 +77,7 @@ PRICE_RANGES = {
     "rice":   (40.0, 120.0),
 }
 
-TODAY = datetime(2026, 2, 12)  # current date
+TODAY = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 START_DATE = TODAY - timedelta(days=90)  # 3 months back
 
 # Generate 2-4 orders per day for 90 days
@@ -88,9 +88,14 @@ while current_date <= TODAY:
     for _ in range(num_orders):
         item = random.choice(ITEMS)
         low, high = PRICE_RANGES[item]
+        # Random lat/lng for source (mandi) and destination (retailer)
+        # Approx range for Karnataka/Bangalore region:
+        # Lat: 12.0 - 14.0, Lng: 76.0 - 78.0
         orders_to_create.append({
-            "source": random.choice(SOURCES),
-            "destination": random.choice(DESTINATIONS),
+            "src_lat": round(random.uniform(12.0, 14.0), 4),
+            "src_long": round(random.uniform(76.0, 78.0), 4),
+            "dest_lat": round(random.uniform(12.0, 14.0), 4),
+            "dest_long": round(random.uniform(76.0, 78.0), 4),
             "item": item,
             "start_time": (current_date + timedelta(hours=random.randint(5, 18), minutes=random.randint(0, 59))).isoformat(),
             "price_per_kg": round(random.uniform(low, high), 2),

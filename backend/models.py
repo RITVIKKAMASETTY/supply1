@@ -78,8 +78,10 @@ class MandiFarmerOrder(Base):
     __tablename__ = "mandi_farmer_orders"
     
     id = Column(Integer, primary_key=True, index=True)
-    source = Column(String(150))
-    destination = Column(String(150))
+    src_lat = Column(Numeric(10, 7))
+    src_long = Column(Numeric(10, 7))
+    dest_lat = Column(Numeric(10, 7))
+    dest_long = Column(Numeric(10, 7))
     item = Column(String(100))
     start_time = Column(TIMESTAMP)
     price_per_kg = Column(Numeric(10, 2))
@@ -115,8 +117,10 @@ class RetailerMandiOrder(Base):
     __tablename__ = "retailer_mandi_order"
     
     id = Column(Integer, primary_key=True, index=True)
-    source = Column(String(150))
-    destination = Column(String(150))
+    src_lat = Column(Numeric(10, 7))
+    src_long = Column(Numeric(10, 7))
+    dest_lat = Column(Numeric(10, 7))
+    dest_long = Column(Numeric(10, 7))
     item = Column(String(100))
     start_time = Column(TIMESTAMP)
     price_per_kg = Column(Numeric(10, 2))
